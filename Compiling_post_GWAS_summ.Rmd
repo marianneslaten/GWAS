@@ -1,0 +1,1100 @@
+---
+title: "Compiling GWAS Summary"
+author: "Marianne Emery"
+date: "7/23/2020"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(dplyr)
+#library(BBmisc)
+
+```
+
+
+```{r}
+#create output table
+col_names <- c("Analysis", "BAA_FAA", "Family", "Phenotypic_preprocessing", "Method", "Num_of_traits", "Total_num_of_sig_SNPs", "Total_num_of_genes", "Num_unqiue_SNPs", "Num_unique_genes", "Num_duplicated_SNPs", "Num_duplicated_genes", "SNP_w_lowest_pvalue", "SNP_most_occurring")
+
+out <- setNames(data.frame(matrix(ncol = 14, nrow = 67)), col_names)
+
+```
+
+
+```{r}
+#use for troubleshooting
+
+
+ #dat <- read.csv("~/Desktop/Ath_1001_GWAS_results/data/test/GAPIT.combined.GWAS.Results_1001_BAA_pyr_fam_BLUP_FarmCPU-TEST2.csv", header =T)
+```
+
+
+
+###--------BAA----------------
+
+BAA FarmCPU BLUP
+```{r}
+
+i = 1     #starting row in table
+
+
+###Make list of file names
+data_path <- "~/Desktop/Ath_1001_GWAS_results/data/BAA/FarmCPU_BLUP/"   # path to the data
+files <- dir(data_path, pattern = "*.csv") # get file names
+
+
+#read in list of files
+for (ii in files) {
+
+  fileName = paste(data_path, ii,sep = '')
+  dat <- read.csv(fileName)
+  
+  #split filename to get method info
+  names_split <- strsplit(fileName, "_")
+
+  temp <- unlist(names_split)     #unlist 
+  temp <- gsub(".csv", "", temp)    #remove .csv
+  
+  temp <- temp[6:11]
+  
+  #function to concat list of characters
+  implode <- function(..., sep='') {
+       paste(..., collapse=sep)
+  }
+
+  name <- implode(temp[-1], sep='_')
+
+  out[i,1] <- name
+
+
+  #filling out descriptive info in table
+  #if "_fam" or "_NA" then remove
+  name <- gsub("_NA","",name)     #get rid of NA
+  name <- gsub("_fam","",name)     #get rid of fam
+
+#split filename to get method info
+  temp_split <- strsplit(name, "_")
+  
+  #save BAA/FAA
+  out[i,2] <- temp_split[[1]][1]
+  
+  #save family
+  out[i,3] <- temp_split[[1]][2]
+  
+  #save BLUE/BLUP (phenotypic processing)
+  out[i,4] <- temp_split[[1]][3]
+  
+  #save method
+  out[i,5] <- temp_split[[1]][4]
+
+
+  #find total number of traits (even if they don't have sig SNPs)
+  uniq_traits <- length(unique(dat$Trait))
+  out[i,6] <- uniq_traits
+
+  #remove NAs; note: do not use na.omit! It will remove any line with NA
+  dat_NArm <- dat[!is.na(dat[, "SNP"]),]
+
+
+  #find total number of SNPs across all traits
+  #note here that you must remove SNPs that are duplicated when they are connected to >1 gene in haploblock   analysis
+  tot_SNPs <- nrow(unique(dat_NArm[,c('Trait','SNP')]))
+  out[i,7] <- tot_SNPs
+  
+  
+  #find number of SNPs that are duplicated across traits
+  all_SNPs <- unique(dat_NArm[,c('Trait','SNP')])
+  all_SNPs$SNP <- as.character(all_SNPs$SNP)
+
+  dup_SNPs <-  
+  all_SNPs %>%
+  filter(SNP %in% unique(.[["SNP"]][duplicated(.[["SNP"]])])) %>% 
+    count(SNP) %>% nrow()
+  
+  out[i,11] <- dup_SNPs
+    
+  
+
+  #find most occurring SNP
+  
+ temp_SNP <- all_SNPs %>%
+  filter(SNP %in% unique(.[["SNP"]][duplicated(.[["SNP"]])])) %>% 
+    count(SNP) 
+
+  
+  most_occur_SNP <- temp_SNP %>% slice(which.max(n))
+  
+  out[i,14] <- paste(most_occur_SNP$n, "(", most_occur_SNP$SNP, ")")
+  
+ 
+  
+  #find SNP with lowest p-value
+  lowest_pvalue_SNP <- dat_NArm %>% slice(which.min(P.value))
+  
+  out[i,13] <-paste(lowest_pvalue_SNP$P.value, "(", lowest_pvalue_SNP$SNP, ")")
+  
+
+  
+ #find total number of genes
+  dat_NAgenes <- dat_NArm[!is.na(dat_NArm[, "Gene_name"]),]
+  tot_genes <- nrow(unique(dat_NAgenes[,c('Trait','Gene_name')]))
+  #print(unique(dat_NAgenes[,c('Trait','Gene_name')]))
+  out[i,8] <- tot_genes
+  
+  
+ #find number of genes that are duplicated across traits
+
+ dup_genes <-  
+  dat_NAgenes %>%
+  filter(Gene_name %in% unique(.[["Gene_name"]][duplicated(.[["Gene_name"]])])) %>% 
+    count(Gene_name) %>% nrow()  
+   
+   out[i,12] <- dup_genes
+  
+
+  #find total number of unique SNPs across all traits
+  uniq_SNP <- length(unique(dat_NArm$SNP))
+  out[i,9] <- uniq_SNP
+
+
+  #extract unique genes
+  uniq_genes <- length(unique(dat_NAgenes$Gene_name))
+  out[i,10] <- uniq_genes
+  
+  i <- i + 1
+
+  }
+
+#find total number of aa families
+#length(unique(dat$Family))
+
+```
+
+
+BAA MLM BLUP
+```{r}
+
+###Make list of file names
+data_path <- "~/Desktop/Ath_1001_GWAS_results/data/BAA/MLM_BLUP/"   # path to the data
+files <- dir(data_path, pattern = "*.csv") # get file names
+
+
+#read in list of files
+for (ii in files) {
+
+  fileName = paste(data_path, ii,sep = '')
+  dat <- read.csv(fileName)
+  
+  #split filename to get method info
+  names_split <- strsplit(fileName, "_")
+
+  temp <- unlist(names_split)     #unlist 
+  temp <- gsub(".csv", "", temp)    #remove .csv
+  
+  temp <- temp[6:11]
+  
+  #function to concat list of characters
+  implode <- function(..., sep='') {
+       paste(..., collapse=sep)
+  }
+
+  name <- implode(temp[-1], sep='_')
+
+  out[i,1] <- name
+
+
+  #filling out descriptive info in table
+  #if "_fam" or "_NA" then remove
+  name <- gsub("_NA","",name)     #get rid of NA
+  name <- gsub("_fam","",name)     #get rid of fam
+
+#split filename to get method info
+  temp_split <- strsplit(name, "_")
+  
+  #save BAA/FAA
+  out[i,2] <- temp_split[[1]][1]
+  
+  #save family
+  out[i,3] <- temp_split[[1]][2]
+  
+  #save BLUE/BLUP (phenotypic processing)
+  out[i,4] <- temp_split[[1]][3]
+  
+  #save method
+  out[i,5] <- temp_split[[1]][4]
+
+
+  #find total number of traits (even if they don't have sig SNPs)
+  uniq_traits <- length(unique(dat$Trait))
+  out[i,6] <- uniq_traits
+
+  #remove NAs; note: do not use na.omit! It will remove any line with NA
+  dat_NArm <- dat[!is.na(dat[, "SNP"]),]
+
+
+  #find total number of SNPs across all traits
+  #note here that you must remove SNPs that are duplicated when they are connected to >1 gene in haploblock   analysis
+  tot_SNPs <- nrow(unique(dat_NArm[,c('Trait','SNP')]))
+  out[i,7] <- tot_SNPs
+  
+  
+  #find number of SNPs that are duplicated across traits
+  all_SNPs <- unique(dat_NArm[,c('Trait','SNP')])
+  all_SNPs$SNP <- as.character(all_SNPs$SNP)
+
+  dup_SNPs <-  
+  all_SNPs %>%
+  filter(SNP %in% unique(.[["SNP"]][duplicated(.[["SNP"]])])) %>% 
+    count(SNP) %>% nrow()
+  
+  out[i,11] <- dup_SNPs
+    
+  
+
+  #find most occurring SNP
+  
+ temp_SNP <- all_SNPs %>%
+  filter(SNP %in% unique(.[["SNP"]][duplicated(.[["SNP"]])])) %>% 
+    count(SNP) 
+
+  
+  most_occur_SNP <- temp_SNP %>% slice(which.max(n))
+  
+  out[i,14] <- paste(most_occur_SNP$n, "(", most_occur_SNP$SNP, ")")
+  
+ 
+  
+  #find SNP with lowest p-value
+  lowest_pvalue_SNP <- dat_NArm %>% slice(which.min(P.value))
+  
+  out[i,13] <-paste(lowest_pvalue_SNP$P.value, "(", lowest_pvalue_SNP$SNP, ")")
+  
+
+  
+ #find total number of genes
+  dat_NAgenes <- dat_NArm[!is.na(dat_NArm[, "Gene_name"]),]
+  tot_genes <- nrow(unique(dat_NAgenes[,c('Trait','Gene_name')]))
+  #print(unique(dat_NAgenes[,c('Trait','Gene_name')]))
+  out[i,8] <- tot_genes
+  
+  
+ #find number of genes that are duplicated across traits
+
+ dup_genes <-  
+  dat_NAgenes %>%
+  filter(Gene_name %in% unique(.[["Gene_name"]][duplicated(.[["Gene_name"]])])) %>% 
+    count(Gene_name) %>% nrow()  
+   
+   out[i,12] <- dup_genes
+  
+
+  #find total number of unique SNPs across all traits
+  uniq_SNP <- length(unique(dat_NArm$SNP))
+  out[i,9] <- uniq_SNP
+
+
+  #extract unique genes
+  uniq_genes <- length(unique(dat_NAgenes$Gene_name))
+  out[i,10] <- uniq_genes
+  
+  i <- i + 1
+
+  }
+```
+
+
+BAA MLM BLUE
+```{r}
+###Make list of file names
+data_path <- "~/Desktop/Ath_1001_GWAS_results/data/BAA/MLM_BLUE/"   # path to the data
+files <- dir(data_path, pattern = "*.csv") # get file names
+
+
+#read in list of files
+for (ii in files) {
+
+  fileName = paste(data_path, ii,sep = '')
+  dat <- read.csv(fileName)
+  
+  #split filename to get method info
+  names_split <- strsplit(fileName, "_")
+
+  temp <- unlist(names_split)     #unlist 
+  temp <- gsub(".csv", "", temp)    #remove .csv
+  
+  temp <- temp[6:11]
+  
+  #function to concat list of characters
+  implode <- function(..., sep='') {
+       paste(..., collapse=sep)
+  }
+
+  name <- implode(temp[-1], sep='_')
+
+  out[i,1] <- name
+
+
+  #filling out descriptive info in table
+  #if "_fam" or "_NA" then remove
+  name <- gsub("_NA","",name)     #get rid of NA
+  name <- gsub("_fam","",name)     #get rid of fam
+
+#split filename to get method info
+  temp_split <- strsplit(name, "_")
+  
+  #save BAA/FAA
+  out[i,2] <- temp_split[[1]][1]
+  
+  #save family
+  out[i,3] <- temp_split[[1]][2]
+  
+  #save BLUE/BLUP (phenotypic processing)
+  out[i,4] <- temp_split[[1]][3]
+  
+  #save method
+  out[i,5] <- temp_split[[1]][4]
+
+
+  #find total number of traits (even if they don't have sig SNPs)
+  uniq_traits <- length(unique(dat$Trait))
+  out[i,6] <- uniq_traits
+
+  #remove NAs; note: do not use na.omit! It will remove any line with NA
+  dat_NArm <- dat[!is.na(dat[, "SNP"]),]
+
+
+  #find total number of SNPs across all traits
+  #note here that you must remove SNPs that are duplicated when they are connected to >1 gene in haploblock   analysis
+  tot_SNPs <- nrow(unique(dat_NArm[,c('Trait','SNP')]))
+  out[i,7] <- tot_SNPs
+  
+  
+  #find number of SNPs that are duplicated across traits
+  all_SNPs <- unique(dat_NArm[,c('Trait','SNP')])
+  all_SNPs$SNP <- as.character(all_SNPs$SNP)
+
+  dup_SNPs <-  
+  all_SNPs %>%
+  filter(SNP %in% unique(.[["SNP"]][duplicated(.[["SNP"]])])) %>% 
+    count(SNP) %>% nrow()
+  
+  out[i,11] <- dup_SNPs
+    
+  
+
+  #find most occurring SNP
+  
+ temp_SNP <- all_SNPs %>%
+  filter(SNP %in% unique(.[["SNP"]][duplicated(.[["SNP"]])])) %>% 
+    count(SNP) 
+
+  
+  most_occur_SNP <- temp_SNP %>% slice(which.max(n))
+  
+  out[i,14] <- paste(most_occur_SNP$n, "(", most_occur_SNP$SNP, ")")
+  
+ 
+  
+  #find SNP with lowest p-value
+  lowest_pvalue_SNP <- dat_NArm %>% slice(which.min(P.value))
+  
+  out[i,13] <-paste(lowest_pvalue_SNP$P.value, "(", lowest_pvalue_SNP$SNP, ")")
+  
+
+  
+ #find total number of genes
+  dat_NAgenes <- dat_NArm[!is.na(dat_NArm[, "Gene_name"]),]
+  tot_genes <- nrow(unique(dat_NAgenes[,c('Trait','Gene_name')]))
+  #print(unique(dat_NAgenes[,c('Trait','Gene_name')]))
+  out[i,8] <- tot_genes
+  
+  
+ #find number of genes that are duplicated across traits
+
+ dup_genes <-  
+  dat_NAgenes %>%
+  filter(Gene_name %in% unique(.[["Gene_name"]][duplicated(.[["Gene_name"]])])) %>% 
+    count(Gene_name) %>% nrow()  
+   
+   out[i,12] <- dup_genes
+  
+
+  #find total number of unique SNPs across all traits
+  uniq_SNP <- length(unique(dat_NArm$SNP))
+  out[i,9] <- uniq_SNP
+
+
+  #extract unique genes
+  uniq_genes <- length(unique(dat_NAgenes$Gene_name))
+  out[i,10] <- uniq_genes
+  
+  i <- i + 1
+
+  }
+
+```
+
+###--------FAA----------------
+
+
+FAA FarmCPU BLUP
+```{r}
+###Make list of file names
+data_path <- "~/Desktop/Ath_1001_GWAS_results/data/FAA/FarmCPU_BLUP/"   # path to the data
+files <- dir(data_path, pattern = "*.csv") # get file names
+
+
+#read in list of files
+for (ii in files) {
+
+  fileName = paste(data_path, ii,sep = '')
+  dat <- read.csv(fileName)
+  
+  #split filename to get method info
+  names_split <- strsplit(fileName, "_")
+
+  temp <- unlist(names_split)     #unlist 
+  temp <- gsub(".csv", "", temp)    #remove .csv
+  
+  temp <- temp[6:11]
+  
+  #function to concat list of characters
+  implode <- function(..., sep='') {
+       paste(..., collapse=sep)
+  }
+
+  name <- implode(temp[-1], sep='_')
+
+  out[i,1] <- name
+
+
+  #filling out descriptive info in table
+  #if "_fam" or "_NA" then remove
+  name <- gsub("_NA","",name)     #get rid of NA
+  name <- gsub("_fam","",name)     #get rid of fam
+
+#split filename to get method info
+  temp_split <- strsplit(name, "_")
+  
+  #save BAA/FAA
+  out[i,2] <- temp_split[[1]][1]
+  
+  #save family
+  out[i,3] <- temp_split[[1]][2]
+  
+  #save BLUE/BLUP (phenotypic processing)
+  out[i,4] <- temp_split[[1]][3]
+  
+  #save method
+  out[i,5] <- temp_split[[1]][4]
+
+
+  #find total number of traits (even if they don't have sig SNPs)
+  uniq_traits <- length(unique(dat$Trait))
+  out[i,6] <- uniq_traits
+
+  #remove NAs; note: do not use na.omit! It will remove any line with NA
+  dat_NArm <- dat[!is.na(dat[, "SNP"]),]
+
+
+  #find total number of SNPs across all traits
+  #note here that you must remove SNPs that are duplicated when they are connected to >1 gene in haploblock   analysis
+  tot_SNPs <- nrow(unique(dat_NArm[,c('Trait','SNP')]))
+  out[i,7] <- tot_SNPs
+  
+  
+  #find number of SNPs that are duplicated across traits
+  all_SNPs <- unique(dat_NArm[,c('Trait','SNP')])
+  all_SNPs$SNP <- as.character(all_SNPs$SNP)
+
+  dup_SNPs <-  
+  all_SNPs %>%
+  filter(SNP %in% unique(.[["SNP"]][duplicated(.[["SNP"]])])) %>% 
+    count(SNP) %>% nrow()
+  
+  out[i,11] <- dup_SNPs
+    
+  
+
+  #find most occurring SNP
+  
+ temp_SNP <- all_SNPs %>%
+  filter(SNP %in% unique(.[["SNP"]][duplicated(.[["SNP"]])])) %>% 
+    count(SNP) 
+
+  
+  most_occur_SNP <- temp_SNP %>% slice(which.max(n))
+  
+  out[i,14] <- paste(most_occur_SNP$n, "(", most_occur_SNP$SNP, ")")
+  
+ 
+  
+  #find SNP with lowest p-value
+  lowest_pvalue_SNP <- dat_NArm %>% slice(which.min(P.value))
+  
+  out[i,13] <-paste(lowest_pvalue_SNP$P.value, "(", lowest_pvalue_SNP$SNP, ")")
+  
+
+  
+ #find total number of genes
+  dat_NAgenes <- dat_NArm[!is.na(dat_NArm[, "Gene_name"]),]
+  tot_genes <- nrow(unique(dat_NAgenes[,c('Trait','Gene_name')]))
+  #print(unique(dat_NAgenes[,c('Trait','Gene_name')]))
+  out[i,8] <- tot_genes
+  
+  
+ #find number of genes that are duplicated across traits
+
+ dup_genes <-  
+  dat_NAgenes %>%
+  filter(Gene_name %in% unique(.[["Gene_name"]][duplicated(.[["Gene_name"]])])) %>% 
+    count(Gene_name) %>% nrow()  
+   
+   out[i,12] <- dup_genes
+  
+
+  #find total number of unique SNPs across all traits
+  uniq_SNP <- length(unique(dat_NArm$SNP))
+  out[i,9] <- uniq_SNP
+
+
+  #extract unique genes
+  uniq_genes <- length(unique(dat_NAgenes$Gene_name))
+  out[i,10] <- uniq_genes
+  
+  i <- i + 1
+
+  }
+
+```
+
+
+
+FAA FarmCPU BLUE
+```{r}
+###Make list of file names
+data_path <- "~/Desktop/Ath_1001_GWAS_results/data/FAA/FarmCPU_BLUE/"   # path to the data
+files <- dir(data_path, pattern = "*.csv") # get file names
+
+
+#read in list of files
+for (ii in files) {
+
+  fileName = paste(data_path, ii,sep = '')
+  dat <- read.csv(fileName)
+  
+  #split filename to get method info
+  names_split <- strsplit(fileName, "_")
+
+  temp <- unlist(names_split)     #unlist 
+  temp <- gsub(".csv", "", temp)    #remove .csv
+  
+  temp <- temp[6:11]
+  
+  #function to concat list of characters
+  implode <- function(..., sep='') {
+       paste(..., collapse=sep)
+  }
+
+  name <- implode(temp[-1], sep='_')
+
+  out[i,1] <- name
+
+
+  #filling out descriptive info in table
+  #if "_fam" or "_NA" then remove
+  name <- gsub("_NA","",name)     #get rid of NA
+  name <- gsub("_fam","",name)     #get rid of fam
+
+#split filename to get method info
+  temp_split <- strsplit(name, "_")
+  
+  #save BAA/FAA
+  out[i,2] <- temp_split[[1]][1]
+  
+  #save family
+  out[i,3] <- temp_split[[1]][2]
+  
+  #save BLUE/BLUP (phenotypic processing)
+  out[i,4] <- temp_split[[1]][3]
+  
+  #save method
+  out[i,5] <- temp_split[[1]][4]
+
+
+  #find total number of traits (even if they don't have sig SNPs)
+  uniq_traits <- length(unique(dat$Trait))
+  out[i,6] <- uniq_traits
+
+  #remove NAs; note: do not use na.omit! It will remove any line with NA
+  dat_NArm <- dat[!is.na(dat[, "SNP"]),]
+
+
+  #find total number of SNPs across all traits
+  #note here that you must remove SNPs that are duplicated when they are connected to >1 gene in haploblock   analysis
+  tot_SNPs <- nrow(unique(dat_NArm[,c('Trait','SNP')]))
+  out[i,7] <- tot_SNPs
+  
+  
+  #find number of SNPs that are duplicated across traits
+  all_SNPs <- unique(dat_NArm[,c('Trait','SNP')])
+  all_SNPs$SNP <- as.character(all_SNPs$SNP)
+
+  dup_SNPs <-  
+  all_SNPs %>%
+  filter(SNP %in% unique(.[["SNP"]][duplicated(.[["SNP"]])])) %>% 
+    count(SNP) %>% nrow()
+  
+  out[i,11] <- dup_SNPs
+    
+  
+
+  #find most occurring SNP
+  
+ temp_SNP <- all_SNPs %>%
+  filter(SNP %in% unique(.[["SNP"]][duplicated(.[["SNP"]])])) %>% 
+    count(SNP) 
+
+  
+  most_occur_SNP <- temp_SNP %>% slice(which.max(n))
+  
+  out[i,14] <- paste(most_occur_SNP$n, "(", most_occur_SNP$SNP, ")")
+  
+ 
+  
+  #find SNP with lowest p-value
+  lowest_pvalue_SNP <- dat_NArm %>% slice(which.min(P.value))
+  
+  out[i,13] <-paste(lowest_pvalue_SNP$P.value, "(", lowest_pvalue_SNP$SNP, ")")
+  
+
+  
+ #find total number of genes
+  dat_NAgenes <- dat_NArm[!is.na(dat_NArm[, "Gene_name"]),]
+  tot_genes <- nrow(unique(dat_NAgenes[,c('Trait','Gene_name')]))
+  #print(unique(dat_NAgenes[,c('Trait','Gene_name')]))
+  out[i,8] <- tot_genes
+  
+  
+ #find number of genes that are duplicated across traits
+
+ dup_genes <-  
+  dat_NAgenes %>%
+  filter(Gene_name %in% unique(.[["Gene_name"]][duplicated(.[["Gene_name"]])])) %>% 
+    count(Gene_name) %>% nrow()  
+   
+   out[i,12] <- dup_genes
+  
+
+  #find total number of unique SNPs across all traits
+  uniq_SNP <- length(unique(dat_NArm$SNP))
+  out[i,9] <- uniq_SNP
+
+
+  #extract unique genes
+  uniq_genes <- length(unique(dat_NAgenes$Gene_name))
+  out[i,10] <- uniq_genes
+  
+  i <- i + 1
+
+  }
+
+```
+
+
+
+FAA MLM BLUP
+```{r}
+###Make list of file names
+data_path <- "~/Desktop/Ath_1001_GWAS_results/data/FAA/MLM_BLUP/"   # path to the data
+files <- dir(data_path, pattern = "*.csv") # get file names
+
+
+#read in list of files
+for (ii in files) {
+
+  fileName = paste(data_path, ii,sep = '')
+  dat <- read.csv(fileName)
+  
+  #split filename to get method info
+  names_split <- strsplit(fileName, "_")
+
+  temp <- unlist(names_split)     #unlist 
+  temp <- gsub(".csv", "", temp)    #remove .csv
+  
+  temp <- temp[6:11]
+  
+  #function to concat list of characters
+  implode <- function(..., sep='') {
+       paste(..., collapse=sep)
+  }
+
+  name <- implode(temp[-1], sep='_')
+
+  out[i,1] <- name
+
+
+  #filling out descriptive info in table
+  #if "_fam" or "_NA" then remove
+  name <- gsub("_NA","",name)     #get rid of NA
+  name <- gsub("_fam","",name)     #get rid of fam
+
+#split filename to get method info
+  temp_split <- strsplit(name, "_")
+  
+  #save BAA/FAA
+  out[i,2] <- temp_split[[1]][1]
+  
+  #save family
+  out[i,3] <- temp_split[[1]][2]
+  
+  #save BLUE/BLUP (phenotypic processing)
+  out[i,4] <- temp_split[[1]][3]
+  
+  #save method
+  out[i,5] <- temp_split[[1]][4]
+
+
+  #find total number of traits (even if they don't have sig SNPs)
+  uniq_traits <- length(unique(dat$Trait))
+  out[i,6] <- uniq_traits
+
+  #remove NAs; note: do not use na.omit! It will remove any line with NA
+  dat_NArm <- dat[!is.na(dat[, "SNP"]),]
+
+
+  #find total number of SNPs across all traits
+  #note here that you must remove SNPs that are duplicated when they are connected to >1 gene in haploblock   analysis
+  tot_SNPs <- nrow(unique(dat_NArm[,c('Trait','SNP')]))
+  out[i,7] <- tot_SNPs
+  
+  
+  #find number of SNPs that are duplicated across traits
+  all_SNPs <- unique(dat_NArm[,c('Trait','SNP')])
+  all_SNPs$SNP <- as.character(all_SNPs$SNP)
+
+  dup_SNPs <-  
+  all_SNPs %>%
+  filter(SNP %in% unique(.[["SNP"]][duplicated(.[["SNP"]])])) %>% 
+    count(SNP) %>% nrow()
+  
+  out[i,11] <- dup_SNPs
+    
+  
+
+  #find most occurring SNP
+  
+ temp_SNP <- all_SNPs %>%
+  filter(SNP %in% unique(.[["SNP"]][duplicated(.[["SNP"]])])) %>% 
+    count(SNP) 
+
+  
+  most_occur_SNP <- temp_SNP %>% slice(which.max(n))
+  
+  out[i,14] <- paste(most_occur_SNP$n, "(", most_occur_SNP$SNP, ")")
+  
+ 
+  
+  #find SNP with lowest p-value
+  lowest_pvalue_SNP <- dat_NArm %>% slice(which.min(P.value))
+  
+  out[i,13] <-paste(lowest_pvalue_SNP$P.value, "(", lowest_pvalue_SNP$SNP, ")")
+  
+
+  
+ #find total number of genes
+  dat_NAgenes <- dat_NArm[!is.na(dat_NArm[, "Gene_name"]),]
+  tot_genes <- nrow(unique(dat_NAgenes[,c('Trait','Gene_name')]))
+  #print(unique(dat_NAgenes[,c('Trait','Gene_name')]))
+  out[i,8] <- tot_genes
+  
+  
+ #find number of genes that are duplicated across traits
+
+ dup_genes <-  
+  dat_NAgenes %>%
+  filter(Gene_name %in% unique(.[["Gene_name"]][duplicated(.[["Gene_name"]])])) %>% 
+    count(Gene_name) %>% nrow()  
+   
+   out[i,12] <- dup_genes
+  
+
+  #find total number of unique SNPs across all traits
+  uniq_SNP <- length(unique(dat_NArm$SNP))
+  out[i,9] <- uniq_SNP
+
+
+  #extract unique genes
+  uniq_genes <- length(unique(dat_NAgenes$Gene_name))
+  out[i,10] <- uniq_genes
+  
+  i <- i + 1
+
+  }
+
+```
+
+
+FAA MLM BLUE
+```{r}
+###Make list of file names
+data_path <- "~/Desktop/Ath_1001_GWAS_results/data/FAA/MLM_BLUE/"   # path to the data
+files <- dir(data_path, pattern = "*.csv") # get file names
+
+
+
+#read in list of files
+for (ii in files) {
+
+  fileName = paste(data_path, ii,sep = '')
+  dat <- read.csv(fileName)
+  
+  #split filename to get method info
+  names_split <- strsplit(fileName, "_")
+
+  temp <- unlist(names_split)     #unlist 
+  temp <- gsub(".csv", "", temp)    #remove .csv
+  
+  temp <- temp[6:11]
+  
+  #function to concat list of characters
+  implode <- function(..., sep='') {
+       paste(..., collapse=sep)
+  }
+
+  name <- implode(temp[-1], sep='_')
+
+  out[i,1] <- name
+
+
+  #filling out descriptive info in table
+  #if "_fam" or "_NA" then remove
+  name <- gsub("_NA","",name)     #get rid of NA
+  name <- gsub("_fam","",name)     #get rid of fam
+
+#split filename to get method info
+  temp_split <- strsplit(name, "_")
+  
+  #save BAA/FAA
+  out[i,2] <- temp_split[[1]][1]
+  
+  #save family
+  out[i,3] <- temp_split[[1]][2]
+  
+  #save BLUE/BLUP (phenotypic processing)
+  out[i,4] <- temp_split[[1]][3]
+  
+  #save method
+  out[i,5] <- temp_split[[1]][4]
+
+
+  #find total number of traits (even if they don't have sig SNPs)
+  uniq_traits <- length(unique(dat$Trait))
+  out[i,6] <- uniq_traits
+
+  #remove NAs; note: do not use na.omit! It will remove any line with NA
+  dat_NArm <- dat[!is.na(dat[, "SNP"]),]
+
+
+  #find total number of SNPs across all traits
+  #note here that you must remove SNPs that are duplicated when they are connected to >1 gene in haploblock   analysis
+  tot_SNPs <- nrow(unique(dat_NArm[,c('Trait','SNP')]))
+  out[i,7] <- tot_SNPs
+  
+  
+  #find number of SNPs that are duplicated across traits
+  all_SNPs <- unique(dat_NArm[,c('Trait','SNP')])
+  all_SNPs$SNP <- as.character(all_SNPs$SNP)
+
+  dup_SNPs <-  
+  all_SNPs %>%
+  filter(SNP %in% unique(.[["SNP"]][duplicated(.[["SNP"]])])) %>% 
+    count(SNP) %>% nrow()
+  
+  out[i,11] <- dup_SNPs
+    
+  
+
+  #find most occurring SNP
+  
+ temp_SNP <- all_SNPs %>%
+  filter(SNP %in% unique(.[["SNP"]][duplicated(.[["SNP"]])])) %>% 
+    count(SNP) 
+
+  
+  most_occur_SNP <- temp_SNP %>% slice(which.max(n))
+  
+  out[i,14] <- paste(most_occur_SNP$n, "(", most_occur_SNP$SNP, ")")
+  
+ 
+  
+  #find SNP with lowest p-value
+  lowest_pvalue_SNP <- dat_NArm %>% slice(which.min(P.value))
+  
+  out[i,13] <-paste(lowest_pvalue_SNP$P.value, "(", lowest_pvalue_SNP$SNP, ")")
+  
+
+  
+ #find total number of genes
+  dat_NAgenes <- dat_NArm[!is.na(dat_NArm[, "Gene_name"]),]
+  tot_genes <- nrow(unique(dat_NAgenes[,c('Trait','Gene_name')]))
+  #print(unique(dat_NAgenes[,c('Trait','Gene_name')]))
+  out[i,8] <- tot_genes
+  
+  
+ #find number of genes that are duplicated across traits
+
+ dup_genes <-  
+  dat_NAgenes %>%
+  filter(Gene_name %in% unique(.[["Gene_name"]][duplicated(.[["Gene_name"]])])) %>% 
+    count(Gene_name) %>% nrow()  
+   
+   out[i,12] <- dup_genes
+  
+
+  #find total number of unique SNPs across all traits
+  uniq_SNP <- length(unique(dat_NArm$SNP))
+  out[i,9] <- uniq_SNP
+
+
+  #extract unique genes
+  uniq_genes <- length(unique(dat_NAgenes$Gene_name))
+  out[i,10] <- uniq_genes
+  
+  i <- i + 1
+
+  }
+```
+
+Output table
+```{r}
+write.csv(out, file="~/Desktop/Ath_1001_GWAS_results/results/GAPIT.combined.GWAS.Results_1001_FAA_BAA_ALL_Traits-2.csv", row.names = FALSE)
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Per family stats
+```{r}
+
+#find total number of unique traits per family
+dat %>%  group_by(Trait) %>% tally()
+
+#find total number of SNPs per family
+aggregate(dat$SNP, by=list(dat$Trait.1), FUN=length)
+
+#option2
+#dat %>% group_by(Trait.1) %>% summarise(SNP = n())
+
+#find total number of UNIQUE SNPs per family
+dat %>%
+  group_by(Trait.1) %>%
+  summarise(count = n_distinct(SNP))
+
+
+#find total number of genes per family
+aggregate(dat$Gene_name, by=list(dat$Trait.1), FUN=length)
+
+#find total number of UNIQUE genes per family
+dat %>%
+  group_by(Trait.1) %>%
+  summarise(count = n_distinct(Gene_name))
+
+
+
+
+#http://www.datasciencemadesimple.com/groupby-count-in-r-2/
+```
+
+
+Reoccuring patterns
+```{r}
+#across all traits, how many times do SNPs occur (or reoccur)
+temp_frequent_snps = dat %>%
+        select(1,2,3,4) %>%
+        drop_na() %>%
+        distinct() %>%
+        group_by_at(1) %>%
+        summarize(Count = n()) %>%
+        arrange(desc(Count)) %>%
+        as.data.frame(stringsAsFactors = FALSE)
+
+#across traits in each family, how many times do SNPs occur (or reoccur)
+#??
+
+
+#SNPs with the lowest p-value
+combined_gwas_result_with_lowest_p_value = dat
+    combined_gwas_result_with_lowest_p_value = combined_gwas_result_with_lowest_p_value[order(combined_gwas_result_with_lowest_p_value[,4]),]
+    if(length(unique(combined_gwas_result_with_lowest_p_value[,4]))>5 & length(unique(combined_gwas_result_with_lowest_p_value[,1]))>5){
+        combined_gwas_result_with_lowest_p_value = combined_gwas_result_with_lowest_p_value[combined_gwas_result_with_lowest_p_value[,1] %in% unique(combined_gwas_result_with_lowest_p_value[,1])[1:5],]
+    }
+    combined_gwas_result_with_lowest_p_value = combined_gwas_result_with_lowest_p_value[order(combined_gwas_result_with_lowest_p_value[,1]), ]
+    gwas_result_filename <- paste("GAPIT.combined.GWAS.five.lowest.p_value.Results.csv", sep = "")
+
+```
+
+```{r}
+
+
+    
+
+```
+
+
+
+
+
+
+
+
+
+Analysis of Phenotypic data
+```{r}
+#heritability’s
+
+
+
+
+```
+
+Anlaysis of Abs traits
+```{r}
+#box plot of FAA and BAA
+
+
+#abs and comp heatmap
+
+
+
+#look at correlation of AA traits
+
+
+
+```
+
+
